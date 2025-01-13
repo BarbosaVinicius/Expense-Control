@@ -1,0 +1,137 @@
+@page "/NewAccount"
+
+@inject NavigationManager NavigationManager;
+@inject IJSRuntime JSRuntime;
+@inject UserService UserService;
+
+<div class="container">
+    <div class="row align-items-center" style="height: 100vh;">
+        <!-- Left column -->
+        <div class="col-md-6 text-start">
+            <h1>Create a New Account</h1>
+            <p>Personal Expense Control.</p>
+        </div>
+
+        <!-- Right column -->
+        <div class="col-md-6">
+            <!-- Input field for Username -->
+            <div class="input-group flex-nowrap mb-3">
+                <input type="text" class="form-control" placeholder="Username" aria-label="Username"
+                    aria-describedby="addon-wrapping" @bind="Username" maxlength="50">
+            </div>
+
+            <!-- Input field for Password -->
+            <div class="input-group flex-nowrap mb-3">
+                <input type="password" class="form-control" placeholder="Password" aria-label="Password"
+                    aria-describedby="addon-wrapping" @bind="Password" maxlength="255">
+            </div>
+
+            <!-- Input field for Repeat Password -->
+            <div class="input-group flex-nowrap mb-3">
+                <input type="password" class="form-control" placeholder="Repeat Password" aria-label="Repeat Password"
+                    aria-describedby="addon-wrapping" @bind="RepeatPassword" maxlength="255">
+            </div>
+
+            <!-- Input field for Email -->
+            <div class="input-group flex-nowrap mb-3">
+                <input type="email" class="form-control" placeholder="E-mail" aria-label="E-mail"
+                    aria-describedby="addon-wrapping" @bind="Email" maxlength="100">
+            </div>
+
+            <!-- Button to create the account -->
+            <button type="button" class="btn btn-primary w-100 mb-2" @onclick="CreateAccount">CREATE</button>  
+            <hr>
+
+            <!-- Button to return to the Home Page -->
+            <button type="button" class="btn btn-success w-100" @onclick="NavigateToHomePage">HOME PAGE</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    // Properties to bind to the input fields
+    private string Username { get; set; } = string.Empty;
+    private string Password { get; set; } = string.Empty;
+    private string RepeatPassword { get; set; } = string.Empty;
+    private string Email { get; set; } = string.Empty;
+
+    // Handles the account creation process
+    private async Task CreateAccount()
+    {
+        // Check if all fields are filled
+        if (string.IsNullOrWhiteSpace(Username) || string.IsNullOrWhiteSpace(Password) || 
+            string.IsNullOrWhiteSpace(RepeatPassword) || string.IsNullOrWhiteSpace(Email))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "All fields must be filled out.");
+            return;
+        }
+
+        // Ensure the passwords match
+        if (Password != RepeatPassword)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Passwords do not match.");
+            return;
+        }
+
+        // Validate the email address format
+        if (!IsValidEmail(Email))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Invalid email address.");
+            return;
+        }
+
+        try
+        {
+            // Ensure the database and user table exist
+            await UserService.EnsureDatabaseAndTableAsync();
+
+            // Hash the password and create the user
+            await UserService.CreateUserAsync(Username, HashPassword(Password), Email);
+
+            // Notify the user of success and redirect to the login page
+            await JSRuntime.InvokeVoidAsync("alert", "Account created successfully! Redirecting to login...");
+            NavigationManager.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            // Handle duplicate entries for username or email
+            if (ex.Message.Contains("Duplicate entry"))
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Username or Email already exists.");
+            }
+            else
+            {
+                // Handle generic errors
+                await JSRuntime.InvokeVoidAsync("alert", $"Error creating account: {ex.Message}");
+            }
+        }
+    }
+
+    // Hash the password using SHA256
+    private string HashPassword(string password)
+    {
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var bytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
+        return Convert.ToBase64String(bytes);
+    }
+
+    // Validate email format
+    private bool IsValidEmail(string email)
+    {
+        try
+        {
+            var addr = new System.Net.Mail.MailAddress(email);
+            return addr.Address == email;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // Navigate back to the home page
+    private void NavigateToHomePage()
+    {
+        NavigationManager.NavigateTo("/");
+    }
+}
