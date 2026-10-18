@@ -1,0 +1,26 @@
+# MySQL for local development. Start it with: docker compose up -d
+# The credentials below are for this local container only (it listens on 127.0.0.1:3307) and match
+# ConnectionStrings:DefaultConnection in src/ExpenseControl.Web/appsettings.Development.json.
+services:
+  db:
+    image: mysql:8.4
+    container_name: expense-control-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_dev_password
+      MYSQL_DATABASE: ExpenseControl
+      MYSQL_USER: expense
+      MYSQL_PASSWORD: expense_dev_password
+    ports:
+      # Host port 3307 (not 3306) so it does not clash with a MySQL already running on this machine.
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  db-data:

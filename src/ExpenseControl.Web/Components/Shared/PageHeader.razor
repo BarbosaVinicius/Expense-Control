@@ -1,0 +1,22 @@
+<div class="page-head">
+    <div>
+        <h1>@Title</h1>
+        @if (!string.IsNullOrEmpty(Subtitle))
+        {
+            <p>@Subtitle</p>
+        }
+    </div>
+    @if (ChildContent is not null)
+    {
+        <div class="d-flex flex-wrap gap-2">@ChildContent</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>Buttons shown on the right.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

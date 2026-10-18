@@ -1,0 +1,326 @@
+@page "/dashboard"
+@page "/MainMenu"
+@attribute [Authorize]
+@inject DashboardService DashboardSvc
+@inject ILogger<Dashboard> Logger
+
+<PageHeader Title="@L["dashboard.greeting", _username]" Subtitle="@L["dashboard.subtitle"]">
+    <a class="btn btn-outline-secondary" href="AmountReceived"><i class="bi bi-plus-circle me-1" aria-hidden="true"></i> @L["nav.newIncome"]</a>
+    <a class="btn btn-primary" href="AddExpense"><i class="bi bi-dash-circle me-1" aria-hidden="true"></i> @L["nav.newExpense"]</a>
+</PageHeader>
+
+<div class="filter-bar">
+    <button type="button" class="btn btn-outline-secondary" @onclick="() => ChangeMonthAsync(-1)"
+            title="@L["dashboard.prevMonth"]" aria-label="@L["dashboard.prevMonth"]">
+        <i class="bi bi-chevron-left" aria-hidden="true"></i>
+    </button>
+    <span class="fw-semibold px-2 text-center" style="min-width: 10rem;" aria-live="polite">@Fmt.MonthYear(_month)</span>
+    <button type="button" class="btn btn-outline-secondary" @onclick="() => ChangeMonthAsync(1)"
+            title="@L["dashboard.nextMonth"]" aria-label="@L["dashboard.nextMonth"]">
+        <i class="bi bi-chevron-right" aria-hidden="true"></i>
+    </button>
+    @if (_month != CurrentMonth)
+    {
+        <button type="button" class="btn btn-ghost" @onclick="GoToCurrentMonthAsync">@L["dashboard.thisMonth"]</button>
+    }
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+else if (_data is null)
+{
+    <div class="text-center py-5" role="status"><div class="spinner-border text-primary" aria-hidden="true"></div></div>
+}
+else if (!_data.HasData)
+{
+    <div class="card"><div class="card-body empty-state">
+        <i class="bi bi-wallet2" aria-hidden="true"></i>
+        <h2 class="h5 mt-3">@L["empty.dashboard.title"]</h2>
+        <p>@L["empty.dashboard.text"]</p>
+        <a class="btn btn-primary" href="AddExpense">@L["empty.dashboard.cta"]</a>
+    </div></div>
+}
+else
+{
+    var previousName = Fmt.MonthYear(_data.Previous.Month);
+    var vsPrevious = L["kpi.vsPrevious", previousName];
+
+    <div class="@(_loading ? "is-loading" : null)">
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-md-6 col-xl-3">
+                <KpiCard Hero="true" Icon="bi-wallet2" Label="@L["kpi.balance"]" Value="@Fmt.Money(_data.Current.Balance)"
+                         ValueClass="@(_data.Current.Balance < 0 ? "amount-out" : null)">
+                    <Delta>
+                        <span class="@BalanceDeltaClass"><i class="bi @BalanceDeltaIcon" aria-hidden="true"></i>@Fmt.Money(BalanceDiff)</span>
+                        <span>@vsPrevious</span>
+                    </Delta>
+                </KpiCard>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <KpiCard Icon="bi-arrow-down-left-circle" Label="@L["kpi.income"]" Value="@Fmt.Money(_data.Current.Income)">
+                    <Delta><DeltaBadge Change="@DashboardData.PercentChange(_data.Previous.Income, _data.Current.Income)" UpIsGood="true" Reference="@vsPrevious" /></Delta>
+                </KpiCard>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <KpiCard Icon="bi-arrow-up-right-circle" Label="@L["kpi.expenses"]" Value="@Fmt.Money(_data.Current.Expenses)">
+                    <Delta><DeltaBadge Change="@DashboardData.PercentChange(_data.Previous.Expenses, _data.Current.Expenses)" UpIsGood="false" Reference="@vsPrevious" /></Delta>
+                </KpiCard>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <KpiCard Icon="bi-piggy-bank" Label="@L["kpi.savings"]"
+                         Value="@(_data.SavingsRate is { } rate ? Fmt.Percent(rate) : "-")"
+                         ValueClass="@(_data.SavingsRate < 0 ? "amount-out" : null)">
+                    <Delta><span>@(_data.SavingsRate is null ? L["kpi.noIncome"] : L["kpi.savingsHint"])</span></Delta>
+                </KpiCard>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-xl-7">
+                <ChartCard Title="@L["chart.trend.title"]" Subtitle="@L["chart.trend.subtitle", DashboardService.TrendMonths]">
+                    <ChartContent><Chart Spec="TrendSpec()" /></ChartContent>
+                    <TableContent>
+                        <table class="table table-sm tabular">
+                            <thead><tr><th>@L["table.month"]</th><th class="text-end">@L["kpi.income"]</th><th class="text-end">@L["kpi.expenses"]</th><th class="text-end">@L["kpi.balance"]</th></tr></thead>
+                            <tbody>
+                                @foreach (var month in _data.Trend)
+                                {
+                                    <tr>
+                                        <td>@Fmt.MonthYear(month.Month)</td>
+                                        <td class="text-end">@Fmt.Money(month.Income)</td>
+                                        <td class="text-end">@Fmt.Money(month.Expenses)</td>
+                                        <td class="text-end">@Fmt.Money(month.Balance)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </TableContent>
+                </ChartCard>
+            </div>
+            <div class="col-12 col-xl-5">
+                <ChartCard Title="@L["chart.categories.title"]" Subtitle="@L["chart.categories.subtitle", Fmt.MonthYear(_month)]">
+                    <ChartContent>
+                        @if (_data.ExpensesByCategory.Count == 0)
+                        {
+                            <div class="empty-state"><i class="bi bi-bar-chart" aria-hidden="true"></i><p class="mt-2 mb-0">@L["chart.categories.empty"]</p></div>
+                        }
+                        else
+                        {
+                            <Chart Spec="CategorySpec()" />
+                        }
+                    </ChartContent>
+                    <TableContent>
+                        <table class="table table-sm tabular">
+                            <thead><tr><th>@L["table.category"]</th><th class="text-end">@L["table.amount"]</th><th class="text-end">@L["table.share"]</th></tr></thead>
+                            <tbody>
+                                @foreach (var item in _data.ExpensesByCategory)
+                                {
+                                    <tr>
+                                        <td><CategoryChip Type="EntryType.Expense" Key="@item.Category" /></td>
+                                        <td class="text-end">@Fmt.Money(item.Total)</td>
+                                        <td class="text-end">@Fmt.Percent(item.Share)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </TableContent>
+                </ChartCard>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-xl-7">
+                <ChartCard Title="@L["chart.cumulative.title"]" Subtitle="@L["chart.cumulative.subtitle"]">
+                    <ChartContent>
+                        @if (_data.CumulativeExpenses.Count == 0)
+                        {
+                            <div class="empty-state"><i class="bi bi-graph-up" aria-hidden="true"></i><p class="mt-2 mb-0">@L["chart.cumulative.empty"]</p></div>
+                        }
+                        else
+                        {
+                            <Chart Spec="CumulativeSpec()" />
+                        }
+                    </ChartContent>
+                    <TableContent>
+                        <table class="table table-sm tabular">
+                            <thead><tr><th>@L["table.day"]</th><th class="text-end">@L["table.accumulated"]</th></tr></thead>
+                            <tbody>
+                                @foreach (var point in _data.CumulativeExpenses)
+                                {
+                                    <tr><td>@point.Day</td><td class="text-end">@Fmt.Money(point.Cumulative)</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </TableContent>
+                </ChartCard>
+            </div>
+            <div class="col-12 col-xl-5">
+                <div class="card h-100"><div class="card-body">
+                    <div class="chart-card-head">
+                        <div><h2>@L["budget.title"]</h2><p>@L["budget.dashboardSubtitle"]</p></div>
+                        <a class="btn btn-sm btn-outline-secondary" href="budgets">@L["budget.manage"]</a>
+                    </div>
+                    @if (_data.Budgets.Count == 0)
+                    {
+                        <div class="empty-state py-4"><i class="bi bi-bullseye" aria-hidden="true"></i><p class="mt-2 mb-0">@L["budget.emptyDashboard"]</p></div>
+                    }
+                    else
+                    {
+                        @foreach (var status in _data.Budgets.Take(5))
+                        {
+                            <BudgetMeter Status="status" />
+                        }
+                    }
+                </div></div>
+            </div>
+        </div>
+
+        <div class="card"><div class="card-body">
+            <div class="chart-card-head">
+                <div><h2>@L["recent.title"]</h2></div>
+                <a class="btn btn-sm btn-outline-secondary" href="transactions">@L["recent.viewAll"]</a>
+            </div>
+            @if (_data.Recent.Count == 0)
+            {
+                <p class="text-muted-ec mb-0">@L["recent.empty"]</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <tbody>
+                            @foreach (var entry in _data.Recent)
+                            {
+                                <tr>
+                                    <td class="d-none d-md-table-cell text-muted-ec text-nowrap">@Fmt.Date(entry.Date)</td>
+                                    <td>
+                                        <div class="fw-semibold">@entry.Name</div>
+                                        <div class="d-md-none small text-muted-ec">@Fmt.Date(entry.Date)</div>
+                                        @if (!string.IsNullOrEmpty(entry.Description))
+                                        {
+                                            <div class="small text-muted-ec">@entry.Description</div>
+                                        }
+                                        <div class="d-md-none mt-1"><CategoryChip Type="entry.Type" Key="@entry.Category" /></div>
+                                    </td>
+                                    <td class="d-none d-md-table-cell"><CategoryChip Type="entry.Type" Key="@entry.Category" /></td>
+                                    <td class="text-end tabular fw-semibold text-nowrap @(entry.Type == EntryType.Income ? "amount-in" : "amount-out")">
+                                        @(entry.Type == EntryType.Income ? "+" : "-")@Fmt.Money(entry.Value)
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div></div>
+    </div>
+}
+
+@code {
+    private DateOnly _month = FirstOfMonth(DateOnly.FromDateTime(DateTime.Today));
+    private DashboardData? _data;
+    private string _username = string.Empty;
+    private string? _error;
+    private bool _loading;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private static DateOnly CurrentMonth => FirstOfMonth(DateOnly.FromDateTime(DateTime.Today));
+
+    private static DateOnly FirstOfMonth(DateOnly date) => new(date.Year, date.Month, 1);
+
+    private decimal BalanceDiff => _data!.Current.Balance - _data.Previous.Balance;
+
+    private string BalanceDeltaIcon => BalanceDiff switch
+    {
+        > 0 => "bi-arrow-up-short",
+        < 0 => "bi-arrow-down-short",
+        _ => "bi-dash"
+    };
+
+    private string? BalanceDeltaClass => BalanceDiff switch
+    {
+        > 0 => "delta-good",
+        < 0 => "delta-bad",
+        _ => null
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _username = AuthState is null ? string.Empty : (await AuthState).User.Identity?.Name ?? string.Empty;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _data = await DashboardSvc.GetAsync(_username, _month);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not load the dashboard.");
+            _error = L["error.generic"];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task ChangeMonthAsync(int months)
+    {
+        _month = _month.AddMonths(months);
+        return LoadAsync();
+    }
+
+    private Task GoToCurrentMonthAsync()
+    {
+        _month = CurrentMonth;
+        return LoadAsync();
+    }
+
+    // The specs are rebuilt on every render; the Chart component only redraws when their content changes.
+
+    private ChartSpec TrendSpec() => new(
+        "columns",
+        _data!.Trend.Select(m => Fmt.ShortMonth(m.Month)).ToList(),
+        [
+            new ChartSeries(L["kpi.income"], "income", _data.Trend.Select(m => m.Income).ToList()),
+            new ChartSeries(L["kpi.expenses"], "expense", _data.Trend.Select(m => m.Expenses).ToList())
+        ],
+        Legend: true,
+        Fmt.Culture.Name,
+        Fmt.CurrencySymbol,
+        L["chart.trend.title"]);
+
+    private ChartSpec CategorySpec() => new(
+        "barsH",
+        _data!.ExpensesByCategory.Select(c => L.Category(c.Category)).ToList(),
+        [
+            new ChartSeries(
+                L["kpi.expenses"],
+                "cat-other",
+                _data.ExpensesByCategory.Select(c => c.Total).ToList(),
+                PointColors: _data.ExpensesByCategory.Select(c => "cat-" + c.Category).ToList(),
+                Extra: _data.ExpensesByCategory.Select(c => Fmt.Percent(c.Share)).ToList())
+        ],
+        Legend: false,
+        Fmt.Culture.Name,
+        Fmt.CurrencySymbol,
+        L["chart.categories.title"]);
+
+    private ChartSpec CumulativeSpec() => new(
+        "line",
+        _data!.CumulativeExpenses.Select(p => p.Day.ToString()).ToList(),
+        [new ChartSeries(L["chart.accumulated"], "expense", _data.CumulativeExpenses.Select(p => p.Cumulative).ToList())],
+        Legend: false,
+        Fmt.Culture.Name,
+        Fmt.CurrencySymbol,
+        L["chart.cumulative.title"]);
+}

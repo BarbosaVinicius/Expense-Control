@@ -1,0 +1,163 @@
+@page "/budgets"
+@attribute [Authorize]
+@inject BudgetService BudgetSvc
+@inject LedgerService Ledger
+@inject ILogger<Budgets> Logger
+
+<PageHeader Title="@L["budgets.title"]" Subtitle="@L["budgets.subtitle", Fmt.MonthYear(_month)]" />
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+
+@if (_saved)
+{
+    <div class="alert alert-success" role="status">@L["budgets.saved"]</div>
+}
+
+@if (!_ready)
+{
+    @if (_error is null)
+    {
+        <div class="text-center py-5" role="status"><div class="spinner-border text-primary" aria-hidden="true"></div></div>
+    }
+}
+else
+{
+    <EditForm Model="_limits" OnSubmit="SaveAsync" novalidate>
+        <div class="card">
+            <div class="card-body">
+                <p class="text-muted-ec">@L["budgets.hint"]</p>
+
+                @foreach (var category in Categories.Expense)
+                {
+                    var key = category.Key;
+                    var limit = _limits[key] ?? 0m;
+                    <div class="row g-3 align-items-start py-3 border-top" style="--bs-border-color: var(--ec-border);">
+                        <div class="col-12 col-md-4 col-xl-3">
+                            <label class="form-label mb-1" for="budget-@key">
+                                <CategoryChip Type="EntryType.Expense" Key="@key" />
+                            </label>
+                            <div class="small text-muted-ec">@L["budgets.spentThisMonth", Fmt.Money(_spent.GetValueOrDefault(key))]</div>
+                        </div>
+                        <div class="col-12 col-md-4 col-xl-3">
+                            <div class="input-group">
+                                <span class="input-group-text">@Fmt.CurrencySymbol</span>
+                                <InputNumber id="@($"budget-{key}")" class="form-control" @bind-Value="_limits[key]"
+                                             step="0.01" min="0" placeholder="@L["budgets.noLimit"]" inputmode="decimal"
+                                             aria-label="@($"{L["budgets.limit"]}: {L.Category(key)}")" />
+                            </div>
+                            <FieldError Message="@_errors.GetValueOrDefault(key)" />
+                        </div>
+                        <div class="col-12 col-md-4 col-xl-6">
+                            @if (limit > 0)
+                            {
+                                <BudgetMeter Status="@(new BudgetStatus(key, limit, _spent.GetValueOrDefault(key)))" />
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="card-footer bg-transparent d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary" disabled="@_busy">
+                    @if (_busy)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                    }
+                    @L["common.save"]
+                </button>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    private readonly Dictionary<string, decimal?> _limits = Categories.Expense.ToDictionary(c => c.Key, _ => (decimal?)null);
+    private readonly Dictionary<string, decimal> _spent = [];
+    private readonly Dictionary<string, string> _errors = [];
+    private Dictionary<string, decimal> _stored = [];
+    private readonly DateOnly _month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private string _username = string.Empty;
+    private bool _ready;
+    private bool _busy;
+    private bool _saved;
+    private string? _error;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _username = AuthState is null ? string.Empty : (await AuthState).User.Identity?.Name ?? string.Empty;
+        try
+        {
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not load the budgets.");
+            _error = L["error.generic"];
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var budgets = await BudgetSvc.GetBudgetsAsync(_username);
+        _stored = budgets.ToDictionary(b => b.Category, b => b.Amount);
+        foreach (var key in _limits.Keys.ToList())
+        {
+            _limits[key] = _stored.TryGetValue(key, out var amount) ? amount : null;
+        }
+
+        var report = await Ledger.GetReportAsync(_username, _month, _month.AddMonths(1).AddDays(-1));
+        _spent.Clear();
+        foreach (var group in report.Value!.Entries.Where(e => e.Type == EntryType.Expense).GroupBy(e => e.Category))
+        {
+            _spent[group.Key] = group.Sum(e => e.Value);
+        }
+
+        _ready = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _errors.Clear();
+        _error = null;
+        _saved = false;
+        _busy = true;
+
+        try
+        {
+            foreach (var (key, typed) in _limits)
+            {
+                var amount = typed ?? 0m;
+                if (amount == _stored.GetValueOrDefault(key))
+                {
+                    continue; // nothing changed for this category
+                }
+
+                var result = await BudgetSvc.SetBudgetAsync(_username, key, amount);
+                if (!result.Succeeded)
+                {
+                    _errors[key] = L.Error(result);
+                }
+            }
+
+            if (_errors.Count == 0)
+            {
+                await LoadAsync();
+                _saved = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not save the budgets.");
+            _error = L["error.generic"];
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

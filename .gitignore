@@ -1,0 +1,33 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+publish/
+
+# IDE / editor
+.vs/
+.vscode/*
+!.vscode/extensions.json
+*.user
+*.suo
+*.DotSettings.user
+.idea/
+
+# Tests / coverage
+TestResults/
+coverage/
+*.trx
+
+# NuGet
+*.nupkg
+.nuget/
+
+# Secrets and local configuration (use user-secrets or environment variables)
+appsettings.Local.json
+appsettings.*.local.json
+.env
+*.pfx
+
+# OS
+Thumbs.db
+.DS_Store

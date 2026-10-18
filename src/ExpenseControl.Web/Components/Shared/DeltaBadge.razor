@@ -1,0 +1,27 @@
+@if (Change is null)
+{
+    <span>@L["kpi.noBase"]</span>
+}
+else
+{
+    <span class="@CssClass">
+        <i class="bi @Icon" aria-hidden="true"></i>@Fmt.SignedPercent(Change.Value)
+    </span>
+    <span>@Reference</span>
+}
+
+@code {
+    /// <summary>Relative change (0.1 = +10%); null when there is nothing to compare with.</summary>
+    [Parameter] public decimal? Change { get; set; }
+
+    /// <summary>True when an increase is good news (income); false when it is bad (expenses).</summary>
+    [Parameter] public bool UpIsGood { get; set; } = true;
+
+    /// <summary>What it is compared with, e.g. "vs. February".</summary>
+    [Parameter] public string? Reference { get; set; }
+
+    // Direction is carried by an arrow and a sign, never by colour alone.
+    private string Icon => Change > 0 ? "bi-arrow-up-short" : Change < 0 ? "bi-arrow-down-short" : "bi-dash";
+
+    private string? CssClass => Change == 0 ? null : (Change > 0) == UpIsGood ? "delta-good" : "delta-bad";
+}

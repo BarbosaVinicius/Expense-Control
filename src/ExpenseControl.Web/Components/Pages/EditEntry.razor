@@ -1,0 +1,34 @@
+@page "/transactions/edit/{TypeSlug}/{Id:int}"
+@attribute [Authorize]
+@inject NavigationManager Navigation
+
+@if (_type is { } type)
+{
+    <PageHeader Title="@L["common.edit"]" Subtitle="@L[type == EntryType.Expense ? "type.expense" : "type.income"]" />
+
+    @* Keyed so that moving from one entry to another gets a fresh form. *@
+    <EntryForm @key="@($"{type}-{Id}")" Type="type" EntryId="Id" />
+}
+
+@code {
+    private EntryType? _type;
+
+    [Parameter] public string TypeSlug { get; set; } = string.Empty;
+
+    [Parameter] public int Id { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _type = TypeSlug.ToLowerInvariant() switch
+        {
+            "expense" => EntryType.Expense,
+            "income" => EntryType.Income,
+            _ => null
+        };
+
+        if (_type is null)
+        {
+            Navigation.NavigateTo("/transactions", replace: true);
+        }
+    }
+}

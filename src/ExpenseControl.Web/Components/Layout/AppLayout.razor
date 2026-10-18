@@ -1,0 +1,108 @@
+@inherits LocalizedLayoutBase
+@implements IDisposable
+@inject SessionAuthenticationStateProvider Session
+@inject NavigationManager Navigation
+
+@if (Language.IsInitialized)
+{
+    <AuthorizeView>
+        <Authorized>
+            <div class="app-shell">
+                <aside class="sidebar @(_menuOpen ? "open" : null)" aria-label="@L["nav.menu"]">
+                    <a class="brand" href="dashboard">
+                        <span class="brand-mark"><i class="bi bi-wallet2" aria-hidden="true"></i></span>
+                        <span>Expense Control</span>
+                    </a>
+
+                    <div class="nav-section">@L["nav.section.main"]</div>
+                    <nav class="d-grid gap-1">
+                        <NavLink class="side-link" href="dashboard" ActiveClass="active">
+                            <i class="bi bi-grid-1x2" aria-hidden="true"></i> @L["nav.dashboard"]
+                        </NavLink>
+                        <NavLink class="side-link" href="transactions" ActiveClass="active">
+                            <i class="bi bi-list-ul" aria-hidden="true"></i> @L["nav.transactions"]
+                        </NavLink>
+                        <NavLink class="side-link" href="budgets" ActiveClass="active">
+                            <i class="bi bi-bullseye" aria-hidden="true"></i> @L["nav.budgets"]
+                        </NavLink>
+                    </nav>
+
+                    <div class="nav-section">@L["nav.section.add"]</div>
+                    <nav class="d-grid gap-1">
+                        <NavLink class="side-link" href="AddExpense" ActiveClass="active">
+                            <i class="bi bi-dash-circle" aria-hidden="true"></i> @L["nav.newExpense"]
+                        </NavLink>
+                        <NavLink class="side-link" href="AmountReceived" ActiveClass="active">
+                            <i class="bi bi-plus-circle" aria-hidden="true"></i> @L["nav.newIncome"]
+                        </NavLink>
+                    </nav>
+
+                    <div class="sidebar-footer">
+                        <button type="button" class="side-link w-100 border-0 bg-transparent text-start" @onclick="LogOutAsync">
+                            <i class="bi bi-box-arrow-right" aria-hidden="true"></i> @L["nav.signOut"]
+                        </button>
+                    </div>
+                </aside>
+                <div class="menu-backdrop @(_menuOpen ? "open" : null)" @onclick="CloseMenu"></div>
+
+                <div class="main-col">
+                    <header class="topbar">
+                        <button type="button" class="btn btn-ghost d-lg-none" @onclick="() => _menuOpen = !_menuOpen"
+                                aria-label="@L["nav.menu"]" aria-expanded="@(_menuOpen ? "true" : "false")">
+                            <i class="bi bi-list fs-5" aria-hidden="true"></i>
+                        </button>
+
+                        <div class="ms-auto d-flex align-items-center gap-1">
+                            <LanguageSelector />
+                            <ThemeToggle />
+                            <div class="d-flex align-items-center gap-2 ms-2" title="@context.User.Identity?.Name">
+                                <span class="avatar" aria-hidden="true">@Initial(context.User.Identity?.Name)</span>
+                                <span class="d-none d-md-inline fw-semibold small">@context.User.Identity?.Name</span>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main class="content">@Body</main>
+                </div>
+
+                <InactivityMonitor />
+            </div>
+        </Authorized>
+        <NotAuthorized>
+            @Body
+        </NotAuthorized>
+    </AuthorizeView>
+}
+
+@code {
+    private bool _menuOpen;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Language.InitializeAsync();
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _menuOpen = false;
+        StateHasChanged();
+    }
+
+    private void CloseMenu() => _menuOpen = false;
+
+    private async Task LogOutAsync()
+    {
+        await Session.SignOutAsync();
+        Navigation.NavigateTo("/");
+    }
+
+    private static string Initial(string? name) =>
+        string.IsNullOrEmpty(name) ? "?" : name[..1];
+
+    public override void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        base.Dispose();
+    }
+}

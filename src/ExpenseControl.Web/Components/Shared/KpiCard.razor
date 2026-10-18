@@ -1,0 +1,23 @@
+<div class="card kpi @(Hero ? "kpi-hero" : null)">
+    <div class="kpi-label"><i class="bi @Icon" aria-hidden="true"></i> @Label</div>
+    <div class="kpi-value tabular @ValueClass">@Value</div>
+    @if (Delta is not null)
+    {
+        <div class="kpi-delta">@Delta</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+
+    [Parameter] public string Icon { get; set; } = "bi-circle";
+
+    [Parameter] public string? ValueClass { get; set; }
+
+    /// <summary>The single number a view leads with.</summary>
+    [Parameter] public bool Hero { get; set; }
+
+    [Parameter] public RenderFragment? Delta { get; set; }
+}

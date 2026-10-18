@@ -1,0 +1,34 @@
+@if (Open)
+{
+    <div class="modal-backdrop-ec" @onclick="CancelAsync">
+        <div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-text"
+             @onclick:stopPropagation="true">
+            <h2 id="confirm-title" class="h5 mb-2">@Title</h2>
+            <p id="confirm-text" class="mb-4 text-muted-ec">@Message</p>
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary" @onclick="CancelAsync">@L["common.cancel"]</button>
+                <button type="button" class="btn btn-danger" @onclick="ConfirmAsync" disabled="@Busy">@ConfirmText</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string Message { get; set; } = string.Empty;
+
+    [Parameter] public string ConfirmText { get; set; } = string.Empty;
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public EventCallback OnConfirm { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private Task ConfirmAsync() => OnConfirm.InvokeAsync();
+
+    private Task CancelAsync() => OnCancel.InvokeAsync();
+}

@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <!-- Único lugar para trocar a versão do .NET (ex.: net10.0 quando o SDK 10 estiver instalado). -->
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+</Project>

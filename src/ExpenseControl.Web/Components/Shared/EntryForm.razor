@@ -1,0 +1,224 @@
+@inject LedgerService Ledger
+@inject NavigationManager Navigation
+@inject ILogger<EntryForm> Logger
+
+<div class="row justify-content-center">
+    <div class="col-xl-7 col-lg-9">
+        <div class="card">
+            <div class="card-body p-4">
+                <h2 class="h5 mb-4 d-flex align-items-center gap-2">
+                    <i class="bi @(Type == EntryType.Expense ? "bi-dash-circle" : "bi-plus-circle")" aria-hidden="true"></i>
+                    @Heading
+                </h2>
+
+                @if (_notFound)
+                {
+                    <div class="alert alert-warning" role="alert">@L["error.entryNotFound"]</div>
+                    <a class="btn btn-outline-secondary" href="transactions">@L["common.back"]</a>
+                }
+                else if (!_ready)
+                {
+                    <div class="text-center py-4" role="status"><div class="spinner-border text-primary" aria-hidden="true"></div></div>
+                }
+                else
+                {
+                    @if (_success is not null)
+                    {
+                        <div class="alert alert-success" role="status">@_success</div>
+                    }
+
+                    @if (_error is not null)
+                    {
+                        <div class="alert alert-danger" role="alert">@_error</div>
+                    }
+
+                    <EditForm Model="_model" OnSubmit="SaveAsync" novalidate>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="entry-name">@L["entry.field.name"]</label>
+                                <InputText id="entry-name" class="@FieldClass("name")" @bind-Value="_model.Name"
+                                           placeholder="@L["entry.namePlaceholder"]" maxlength="@LedgerLimits.MaxNameLength" />
+                                <FieldError Message="@_errors.GetValueOrDefault("name")" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label" for="entry-category">@L["entry.field.category"]</label>
+                                <InputSelect id="entry-category" class="@FieldClass("category")" @bind-Value="_model.Category">
+                                    @foreach (var category in Categories.For(Type))
+                                    {
+                                        <option value="@category.Key">@L.Category(category.Key)</option>
+                                    }
+                                </InputSelect>
+                                <FieldError Message="@_errors.GetValueOrDefault("category")" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label" for="entry-date">@L["entry.field.date"]</label>
+                                <InputDate id="entry-date" class="form-control" @bind-Value="_model.Date" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label" for="entry-value">@L["entry.field.value"]</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">@Fmt.CurrencySymbol</span>
+                                    <InputNumber id="entry-value" class="@FieldClass("value")" @bind-Value="_model.Value"
+                                                 step="0.01" min="0" placeholder="0.00" inputmode="decimal" />
+                                </div>
+                                <FieldError Message="@_errors.GetValueOrDefault("value")" />
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label" for="entry-description">
+                                    @L["entry.field.description"] <span class="text-muted-ec fw-normal">(@L["common.optional"])</span>
+                                </label>
+                                <InputText id="entry-description" class="@FieldClass("description")" @bind-Value="_model.Description"
+                                           placeholder="@L["entry.descriptionPlaceholder"]" maxlength="@LedgerLimits.MaxDescriptionLength" />
+                                <FieldError Message="@_errors.GetValueOrDefault("description")" />
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <a class="btn btn-outline-secondary" href="transactions">@L["common.back"]</a>
+                            <button type="submit" class="btn btn-primary" disabled="@_busy">
+                                @if (_busy)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                                }
+                                @L["common.save"]
+                            </button>
+                        </div>
+                    </EditForm>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly EntryModel _model = new();
+    private readonly Dictionary<string, string> _errors = [];
+    private LedgerEntry? _existing;
+    private string _username = string.Empty;
+    private bool _ready;
+    private bool _notFound;
+    private bool _busy;
+    private string? _success;
+    private string? _error;
+
+    [Parameter, EditorRequired] public EntryType Type { get; set; }
+
+    /// <summary>When set, the form edits that entry instead of creating a new one.</summary>
+    [Parameter] public int? EntryId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool IsEdit => EntryId.HasValue;
+
+    private string Heading => L[$"entry.{(IsEdit ? "edit" : "new")}.{(Type == EntryType.Expense ? "expense" : "income")}"];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _username = AuthState is null ? string.Empty : (await AuthState).User.Identity?.Name ?? string.Empty;
+        _model.Category = Categories.Other;
+        _model.Date = DateOnly.FromDateTime(DateTime.Today);
+
+        if (EntryId is { } id)
+        {
+            _existing = await Ledger.GetEntryAsync(_username, Type, id);
+            if (_existing is null)
+            {
+                _notFound = true;
+                return;
+            }
+
+            _model.Name = _existing.Name;
+            _model.Category = _existing.Category;
+            _model.Date = _existing.Date;
+            _model.Value = _existing.Value;
+            _model.Description = _existing.Description;
+        }
+
+        _ready = true;
+    }
+
+    private string FieldClass(string field) =>
+        (field == "category" ? "form-select" : "form-control") + (_errors.ContainsKey(field) ? " is-invalid" : string.Empty);
+
+    private async Task SaveAsync()
+    {
+        _errors.Clear();
+        _error = null;
+        _success = null;
+
+        _busy = true;
+        try
+        {
+            var value = _model.Value ?? 0m;
+            var result = _existing is null
+                ? await Ledger.AddEntryAsync(Type, _username, _model.Name, _model.Date, value, _model.Description, _model.Category)
+                : await Ledger.UpdateEntryAsync(_existing with
+                {
+                    Name = _model.Name,
+                    Date = _model.Date,
+                    Value = value,
+                    Description = _model.Description,
+                    Category = _model.Category
+                });
+
+            if (!result.Succeeded)
+            {
+                ShowError(result);
+                return;
+            }
+
+            if (IsEdit)
+            {
+                Navigation.NavigateTo("/transactions");
+                return;
+            }
+
+            // Stay on the form so several entries can be added in a row; keep the date and category.
+            _success = Type == EntryType.Expense ? L["entry.saved.expense"] : L["entry.saved.income"];
+            _model.Name = string.Empty;
+            _model.Value = null;
+            _model.Description = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not save a {EntryType} entry.", Type);
+            _error = L["error.generic"];
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // Puts a service error next to the field it is about.
+    private void ShowError(ExpenseControl.Core.Common.OperationResult result)
+    {
+        var message = L.Error(result);
+        switch (result.Error)
+        {
+            case "error.nameRequired": _errors["name"] = message; break;
+            case "error.valueRange" or "error.valueDecimals": _errors["value"] = message; break;
+            case "error.descriptionTooLong": _errors["description"] = message; break;
+            case "error.invalidCategory": _errors["category"] = message; break;
+            default: _error = message; break;
+        }
+    }
+
+    private sealed class EntryModel
+    {
+        public string Name { get; set; } = string.Empty;
+
+        public string Category { get; set; } = Categories.Other;
+
+        public DateOnly Date { get; set; }
+
+        public decimal? Value { get; set; }
+
+        public string Description { get; set; } = string.Empty;
+    }
+}

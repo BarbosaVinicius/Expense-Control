@@ -1,0 +1,1 @@
+ALTER TABLE AmountReceived ADD COLUMN Category VARCHAR(30) NOT NULL DEFAULT 'other';

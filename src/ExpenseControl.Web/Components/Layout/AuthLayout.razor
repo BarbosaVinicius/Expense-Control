@@ -1,0 +1,63 @@
+@inherits LocalizedLayoutBase
+
+@if (Language.IsInitialized)
+{
+    <div class="auth-wrap">
+        <aside class="auth-brand">
+            <a class="brand" href="">
+                <span class="brand-mark"><i class="bi bi-wallet2" aria-hidden="true"></i></span>
+                <span>Expense Control</span>
+            </a>
+
+            <div>
+                <h1>@L["auth.brand.headline"]</h1>
+                <p class="lead">@L["auth.brand.lead"]</p>
+                <ul class="auth-features">
+                    <li>
+                        <i class="bi bi-graph-up-arrow" aria-hidden="true"></i>
+                        <div><strong>@L["auth.feature1.title"]</strong><br /><span>@L["auth.feature1.text"]</span></div>
+                    </li>
+                    <li>
+                        <i class="bi bi-bullseye" aria-hidden="true"></i>
+                        <div><strong>@L["auth.feature2.title"]</strong><br /><span>@L["auth.feature2.text"]</span></div>
+                    </li>
+                    <li>
+                        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                        <div><strong>@L["auth.feature3.title"]</strong><br /><span>@L["auth.feature3.text"]</span></div>
+                    </li>
+                </ul>
+            </div>
+
+            <small class="text-white-50">&copy; @DateTime.Now.Year Expense Control</small>
+
+            <svg class="auth-deco" viewBox="0 0 400 260" fill="none" aria-hidden="true">
+                <rect x="20" y="150" width="46" height="100" rx="8" fill="#fff" />
+                <rect x="90" y="110" width="46" height="140" rx="8" fill="#fff" />
+                <rect x="160" y="70" width="46" height="180" rx="8" fill="#fff" />
+                <rect x="230" y="120" width="46" height="130" rx="8" fill="#fff" />
+                <rect x="300" y="30" width="46" height="220" rx="8" fill="#fff" />
+                <path d="M20 120 L113 80 L183 40 L253 90 L323 10" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+        </aside>
+
+        <main class="auth-main">
+            <div class="auth-toolbar">
+                <LanguageSelector />
+                <ThemeToggle />
+            </div>
+            <div class="auth-form-wrap">
+                <div class="w-100 d-flex flex-column align-items-center">
+                    <a class="brand auth-mobile-brand" href="">
+                        <span class="brand-mark"><i class="bi bi-wallet2" aria-hidden="true"></i></span>
+                        <span>Expense Control</span>
+                    </a>
+                    @Body
+                </div>
+            </div>
+        </main>
+    </div>
+}
+
+@code {
+    protected override async Task OnInitializedAsync() => await Language.InitializeAsync();
+}

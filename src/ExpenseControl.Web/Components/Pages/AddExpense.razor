@@ -1,0 +1,5 @@
+@page "/AddExpense"
+@attribute [Authorize]
+
+<PageHeader Title="@L["nav.newExpense"]" Subtitle="@L["entry.subtitle.expense"]" />
+<EntryForm Type="EntryType.Expense" />

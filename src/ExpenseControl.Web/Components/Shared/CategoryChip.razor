@@ -1,0 +1,13 @@
+<span class="cat-chip">
+    <span class="cat-dot" style="background: var(--viz-cat-@Key);" aria-hidden="true"></span>
+    <i class="bi @Icon" aria-hidden="true"></i>
+    @L.Category(Key)
+</span>
+
+@code {
+    [Parameter, EditorRequired] public EntryType Type { get; set; }
+
+    [Parameter, EditorRequired] public string Key { get; set; } = Categories.Other;
+
+    private string Icon => Categories.Get(Type, Key).Icon;
+}

@@ -1,0 +1,31 @@
+<div class="mb-3">
+    <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
+        <CategoryChip Type="EntryType.Expense" Key="@Status.Category" />
+        <span class="small tabular text-muted-ec">@L["budget.spentOf", Fmt.Money(Status.Spent), Fmt.Money(Status.Limit)]</span>
+    </div>
+    <div class="meter @StateClass" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Percent"
+         aria-label="@L.Category(Status.Category)">
+        <span style="width: @Width%"></span>
+    </div>
+    <div class="mt-1"><span class="meter-status @StateClass"><i class="bi @Icon" aria-hidden="true"></i> @StatusText</span></div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public BudgetStatus Status { get; set; } = default!;
+
+    private int Percent => (int)Math.Round(Status.Ratio * 100);
+
+    // The bar never overflows its track; going over the limit is shown by colour, icon and text.
+    private int Width => Math.Min(100, Percent);
+
+    private string StateClass => Status.IsOver ? "over" : Status.Ratio >= 0.8m ? "warn" : "ok";
+
+    private string Icon => StateClass switch { "over" => "bi-x-octagon", "warn" => "bi-exclamation-triangle", _ => "bi-check-circle" };
+
+    private string StatusText => StateClass switch
+    {
+        "over" => L["budget.over", Fmt.Money(-Status.Remaining), Percent.ToString()],
+        "warn" => L["budget.warn", Fmt.Money(Status.Remaining), Percent.ToString()],
+        _ => L["budget.ok", Fmt.Money(Status.Remaining), Percent.ToString()]
+    };
+}

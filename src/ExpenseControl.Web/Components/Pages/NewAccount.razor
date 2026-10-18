@@ -1,0 +1,129 @@
+@page "/NewAccount"
+@layout AuthLayout
+@inject AuthService Auth
+@inject NavigationManager Navigation
+@inject ILogger<NewAccount> Logger
+
+<div class="card auth-card">
+    <h2 class="mb-1">@L["register.title"]</h2>
+    <p class="text-muted-ec mb-4">@L["register.subtitle"]</p>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger" role="alert">@_error</div>
+    }
+
+    <EditForm Model="_model" OnSubmit="CreateAsync" novalidate>
+        <div class="mb-3">
+            <label class="form-label" for="reg-username">@L["field.username"]</label>
+            <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-person" aria-hidden="true"></i></span>
+                <InputText id="reg-username" class="@FieldClass("username")" @bind-Value="_model.Username"
+                           autocomplete="username" maxlength="@AccountRules.MaxUsernameLength" />
+            </div>
+            <FieldError Message="@Error("username")" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="reg-email">@L["field.email"]</label>
+            <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-envelope" aria-hidden="true"></i></span>
+                <InputText id="reg-email" type="email" class="@FieldClass("email")" @bind-Value="_model.Email"
+                           autocomplete="email" maxlength="@AccountRules.MaxEmailLength" />
+            </div>
+            <FieldError Message="@Error("email")" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="reg-password">@L["field.password"]</label>
+            <PasswordInput Id="reg-password" @bind-Value="_model.Password" Autocomplete="new-password"
+                           HasError="@HasError("password")" />
+            <div class="form-text">@L["field.passwordHint", AccountRules.MinPasswordLength]</div>
+            <FieldError Message="@Error("password")" />
+        </div>
+
+        <div class="mb-4">
+            <label class="form-label" for="reg-confirm">@L["field.confirmPassword"]</label>
+            <PasswordInput Id="reg-confirm" @bind-Value="_model.Confirm" Autocomplete="new-password"
+                           HasError="@HasError("confirm")" />
+            <FieldError Message="@Error("confirm")" />
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100" disabled="@_busy">
+            @if (_busy)
+            {
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+            }
+            @L["register.submit"]
+        </button>
+    </EditForm>
+
+    <hr class="my-4">
+
+    <p class="text-center mb-0">
+        <span class="text-muted-ec">@L["register.haveAccount"]</span>
+        <a href="" class="text-decoration-none fw-semibold">@L["register.signIn"]</a>
+    </p>
+</div>
+
+@code {
+    private readonly RegisterModel _model = new();
+    private readonly Dictionary<string, string> _errors = [];
+    private bool _busy;
+    private string? _error;
+
+    private string? Error(string field) => _errors.GetValueOrDefault(field);
+
+    private bool HasError(string field) => _errors.ContainsKey(field);
+
+    private string FieldClass(string field) => "form-control" + (HasError(field) ? " is-invalid" : string.Empty);
+
+    private async Task CreateAsync()
+    {
+        _errors.Clear();
+        _error = null;
+
+        if (string.IsNullOrWhiteSpace(_model.Username)) { _errors["username"] = L["validation.required"]; }
+        if (string.IsNullOrWhiteSpace(_model.Email)) { _errors["email"] = L["validation.required"]; }
+        if (string.IsNullOrEmpty(_model.Password)) { _errors["password"] = L["validation.required"]; }
+        if (_model.Confirm != _model.Password) { _errors["confirm"] = L["validation.mismatch"]; }
+
+        if (_errors.Count > 0)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Auth.RegisterAsync(_model.Username, _model.Email, _model.Password);
+            if (!result.Succeeded)
+            {
+                _error = L.Error(result);
+                return;
+            }
+
+            Navigation.NavigateTo("/?notice=registered");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Account creation failed unexpectedly.");
+            _error = L["error.generic"];
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class RegisterModel
+    {
+        public string Username { get; set; } = string.Empty;
+
+        public string Email { get; set; } = string.Empty;
+
+        public string Password { get; set; } = string.Empty;
+
+        public string Confirm { get; set; } = string.Empty;
+    }
+}

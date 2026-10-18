@@ -1,0 +1,28 @@
+@inject IJSRuntime JS
+
+<button type="button" class="btn btn-ghost" @onclick="ToggleAsync" title="@Label" aria-label="@Label">
+    <i class="bi @(_dark ? "bi-sun" : "bi-moon-stars")" aria-hidden="true"></i>
+</button>
+
+@code {
+    private bool _dark;
+
+    private string Label => _dark ? L["theme.toLight"] : L["theme.toDark"];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _dark = await JS.InvokeAsync<string>("ecPrefs.getTheme") == "dark";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or JSDisconnectedException)
+        {
+            // No JS yet: the icon corrects itself on the first click.
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        _dark = await JS.InvokeAsync<string>("ecPrefs.toggleTheme") == "dark";
+    }
+}

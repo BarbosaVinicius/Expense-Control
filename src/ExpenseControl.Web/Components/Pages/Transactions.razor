@@ -1,0 +1,375 @@
+@page "/transactions"
+@page "/Report"
+@attribute [Authorize]
+@using System.Globalization
+@inject LedgerService Ledger
+@inject IJSRuntime JS
+@inject ILogger<Transactions> Logger
+
+<PageHeader Title="@L["tx.title"]" Subtitle="@L["tx.subtitle"]">
+    <button type="button" class="btn btn-outline-secondary" @onclick="ExportAsync" disabled="@(Visible.Count == 0)">
+        <i class="bi bi-download me-1" aria-hidden="true"></i> @L["tx.export"]
+    </button>
+    <a class="btn btn-outline-secondary" href="AmountReceived"><i class="bi bi-plus-circle me-1" aria-hidden="true"></i> @L["nav.newIncome"]</a>
+    <a class="btn btn-primary" href="AddExpense"><i class="bi bi-dash-circle me-1" aria-hidden="true"></i> @L["nav.newExpense"]</a>
+</PageHeader>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-12">
+                <label class="form-label" for="tx-search">@L["filter.search"]</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
+                    <input id="tx-search" type="search" class="form-control" placeholder="@L["filter.searchPlaceholder"]"
+                           value="@_search" @oninput="e => { _search = e.Value?.ToString() ?? string.Empty; _page = 0; }" />
+                </div>
+            </div>
+            <div class="col-12 col-md-4 col-xl">
+                <label class="form-label" for="tx-period">@L["filter.period"]</label>
+                <select id="tx-period" class="form-select" value="@_period" @onchange="OnPeriodChangedAsync">
+                    @foreach (var period in Periods)
+                    {
+                        <option value="@period" selected="@(period == _period)">@L["period." + period]</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-4 col-xl">
+                <label class="form-label" for="tx-from">@L["filter.from"]</label>
+                <input id="tx-from" type="date" class="form-control" value="@_start.ToString("yyyy-MM-dd")" @onchange="e => OnDateChangedAsync(e, true)" />
+            </div>
+            <div class="col-6 col-md-4 col-xl">
+                <label class="form-label" for="tx-to">@L["filter.to"]</label>
+                <input id="tx-to" type="date" class="form-control" value="@_end.ToString("yyyy-MM-dd")" @onchange="e => OnDateChangedAsync(e, false)" />
+            </div>
+            <div class="col-6 col-md-4 col-xl">
+                <label class="form-label" for="tx-type">@L["filter.type"]</label>
+                <select id="tx-type" class="form-select" value="@_type" @onchange="OnTypeChanged">
+                    <option value="" selected="@(_type == "")">@L["filter.all"]</option>
+                    <option value="Expense" selected="@(_type == "Expense")">@L["type.expenses"]</option>
+                    <option value="Income" selected="@(_type == "Income")">@L["type.incomes"]</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-4 col-xl">
+                <label class="form-label" for="tx-category">@L["filter.category"]</label>
+                <select id="tx-category" class="form-select" value="@_category" @onchange="e => { _category = e.Value?.ToString() ?? string.Empty; _page = 0; }">
+                    <option value="" selected="@(_category == "")">@L["filter.all"]</option>
+                    @foreach (var key in CategoryKeys)
+                    {
+                        <option value="@key" selected="@(_category == key)">@L.Category(key)</option>
+                    }
+                </select>
+            </div>
+        </div>
+        @if (!Filter.IsEmpty)
+        {
+            <div class="mt-2">
+                <button type="button" class="btn btn-sm btn-ghost" @onclick="ClearFilters"><i class="bi bi-x-circle me-1" aria-hidden="true"></i> @L["filter.clear"]</button>
+            </div>
+        }
+    </div>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+
+@if (_info is not null)
+{
+    <div class="alert alert-success" role="status">@_info</div>
+}
+
+@if (_report is null)
+{
+    @if (_error is null)
+    {
+        <div class="text-center py-5" role="status"><div class="spinner-border text-primary" aria-hidden="true"></div></div>
+    }
+}
+else
+{
+    <div class="row g-3 mb-3 @(_loading ? "is-loading" : null)">
+        <div class="col-12 col-md-4">
+            <KpiCard Icon="bi-arrow-down-left-circle" Label="@L["kpi.income"]" Value="@Fmt.Money(Visible.TotalIncome)" />
+        </div>
+        <div class="col-12 col-md-4">
+            <KpiCard Icon="bi-arrow-up-right-circle" Label="@L["kpi.expenses"]" Value="@Fmt.Money(Visible.TotalExpenses)" />
+        </div>
+        <div class="col-12 col-md-4">
+            <KpiCard Icon="bi-wallet2" Label="@L["kpi.balance"]" Value="@Fmt.Money(Visible.Balance)"
+                     ValueClass="@(Visible.Balance < 0 ? "amount-out" : null)" />
+        </div>
+    </div>
+
+    <div class="card @(_loading ? "is-loading" : null)">
+        @if (Visible.Count == 0)
+        {
+            <div class="card-body empty-state">
+                <i class="bi bi-inbox" aria-hidden="true"></i>
+                <h2 class="h5 mt-3">@(_report.IsEmpty ? L["tx.empty.title"] : L["tx.empty.filtered"])</h2>
+                @if (_report.IsEmpty)
+                {
+                    <p>@L["tx.empty.text"]</p>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="d-none d-md-table-cell">
+                                <button type="button" class="btn btn-link p-0 text-decoration-none text-reset fw-semibold" @onclick="ToggleSort">
+                                    @L["tx.col.date"] <i class="bi @(_newestFirst ? "bi-arrow-down" : "bi-arrow-up")" aria-hidden="true"></i>
+                                </button>
+                            </th>
+                            <th>@L["tx.col.title"]</th>
+                            <th class="d-none d-md-table-cell">@L["tx.col.category"]</th>
+                            <th class="text-end">@L["tx.col.value"]</th>
+                            <th class="text-end"><span class="visually-hidden">@L["tx.col.actions"]</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in Page)
+                        {
+                            <tr>
+                                <td class="d-none d-md-table-cell text-nowrap text-muted-ec">@Fmt.Date(entry.Date)</td>
+                                <td>
+                                    <div class="fw-semibold">@entry.Name</div>
+                                    <div class="d-md-none small text-muted-ec">@Fmt.Date(entry.Date)</div>
+                                    @if (!string.IsNullOrEmpty(entry.Description))
+                                    {
+                                        <div class="small text-muted-ec">@entry.Description</div>
+                                    }
+                                    <div class="d-md-none mt-1"><CategoryChip Type="entry.Type" Key="@entry.Category" /></div>
+                                </td>
+                                <td class="d-none d-md-table-cell"><CategoryChip Type="entry.Type" Key="@entry.Category" /></td>
+                                <td class="text-end tabular fw-semibold text-nowrap @(entry.Type == EntryType.Income ? "amount-in" : "amount-out")">
+                                    @(entry.Type == EntryType.Income ? "+" : "-")@Fmt.Money(entry.Value)
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    <a class="btn btn-sm btn-ghost" href="transactions/edit/@entry.Type.ToString().ToLowerInvariant()/@entry.Id"
+                                       title="@L["common.edit"]" aria-label="@L["common.edit"]: @entry.Name"><i class="bi bi-pencil" aria-hidden="true"></i></a>
+                                    <button type="button" class="btn btn-sm btn-ghost" @onclick="() => _toDelete = entry"
+                                            title="@L["common.delete"]" aria-label="@L["common.delete"]: @entry.Name"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer d-flex flex-wrap justify-content-between align-items-center gap-2 bg-transparent">
+                <span class="small text-muted-ec">@L["tx.count", Visible.Count]</span>
+                @if (PageCount > 1)
+                {
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(_page == 0)" @onclick="() => _page--"
+                                aria-label="@L["common.previous"]"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+                        <span class="small">@L["tx.page", _page + 1, PageCount]</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(_page >= PageCount - 1)" @onclick="() => _page++"
+                                aria-label="@L["common.next"]"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+<ConfirmDialog Open="@(_toDelete is not null)" Busy="_deleting"
+               Title="@L["tx.delete.title"]"
+               Message="@(_toDelete is null ? string.Empty : L["tx.delete.text", _toDelete.Name])"
+               ConfirmText="@L["common.delete"]"
+               OnConfirm="DeleteAsync" OnCancel="() => _toDelete = null" />
+
+@code {
+    private const int PageSize = 25;
+
+    private static readonly string[] Periods = ["thisMonth", "lastMonth", "last30", "last90", "thisYear", "custom"];
+
+    private string _period = "thisMonth";
+    private DateOnly _start;
+    private DateOnly _end;
+    private string _type = string.Empty;
+    private string _category = string.Empty;
+    private string _search = string.Empty;
+    private bool _newestFirst = true;
+    private int _page;
+
+    private string _username = string.Empty;
+    private LedgerReport? _report;
+    private LedgerEntry? _toDelete;
+    private string? _error;
+    private string? _info;
+    private bool _loading;
+    private bool _deleting;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private LedgerFilter Filter => new(
+        Enum.TryParse<EntryType>(_type, out var type) ? type : null,
+        string.IsNullOrEmpty(_category) ? null : _category,
+        _search);
+
+    // Safe to read while the first load is still running (the header already uses it).
+    private LedgerReport Visible => (_report ?? new LedgerReport(_start, _end, [])).Filtered(Filter);
+
+    private IEnumerable<LedgerEntry> Sorted => _newestFirst
+        ? Visible.Entries.OrderByDescending(e => e.Date).ThenByDescending(e => e.Id)
+        : Visible.Entries.OrderBy(e => e.Date).ThenBy(e => e.Id);
+
+    private IEnumerable<LedgerEntry> Page => Sorted.Skip(Math.Min(_page, PageCount - 1) * PageSize).Take(PageSize);
+
+    private int PageCount => Math.Max(1, (int)Math.Ceiling(Visible.Count / (double)PageSize));
+
+    private IEnumerable<string> CategoryKeys => _type switch
+    {
+        "Expense" => Categories.Expense.Select(c => c.Key),
+        "Income" => Categories.Income.Select(c => c.Key),
+        _ => Categories.AllKeys
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _username = AuthState is null ? string.Empty : (await AuthState).User.Identity?.Name ?? string.Empty;
+        ApplyPeriod("thisMonth");
+        await LoadAsync();
+    }
+
+    private void ApplyPeriod(string period)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        _period = period;
+        (_start, _end) = period switch
+        {
+            "lastMonth" => (new DateOnly(today.Year, today.Month, 1).AddMonths(-1), new DateOnly(today.Year, today.Month, 1).AddDays(-1)),
+            "last30" => (today.AddDays(-29), today),
+            "last90" => (today.AddDays(-89), today),
+            "thisYear" => (new DateOnly(today.Year, 1, 1), new DateOnly(today.Year, 12, 31)),
+            "custom" => (_start, _end),
+            _ => (new DateOnly(today.Year, today.Month, 1), new DateOnly(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month)))
+        };
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _page = 0;
+        try
+        {
+            var result = await Ledger.GetReportAsync(_username, _start, _end);
+            if (result.Succeeded)
+            {
+                _report = result.Value;
+            }
+            else
+            {
+                _error = L.Error(result);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not load the transactions.");
+            _error = L["error.generic"];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnPeriodChangedAsync(ChangeEventArgs e)
+    {
+        ApplyPeriod(e.Value?.ToString() ?? "thisMonth");
+        if (_period != "custom")
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task OnDateChangedAsync(ChangeEventArgs e, bool isStart)
+    {
+        if (!DateOnly.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, out var date))
+        {
+            return;
+        }
+
+        if (isStart)
+        {
+            _start = date;
+        }
+        else
+        {
+            _end = date;
+        }
+
+        _period = "custom";
+        await LoadAsync();
+    }
+
+    private void OnTypeChanged(ChangeEventArgs e)
+    {
+        _type = e.Value?.ToString() ?? string.Empty;
+        if (_category.Length > 0 && !CategoryKeys.Contains(_category))
+        {
+            _category = string.Empty;
+        }
+
+        _page = 0;
+    }
+
+    private void ClearFilters()
+    {
+        _type = string.Empty;
+        _category = string.Empty;
+        _search = string.Empty;
+        _page = 0;
+    }
+
+    private void ToggleSort() => _newestFirst = !_newestFirst;
+
+    private async Task DeleteAsync()
+    {
+        if (_toDelete is null)
+        {
+            return;
+        }
+
+        _deleting = true;
+        try
+        {
+            var result = await Ledger.DeleteEntryAsync(_username, _toDelete.Type, _toDelete.Id);
+            _info = result.Succeeded ? L["tx.deleted"] : null;
+            _error = result.Succeeded ? null : L.Error(result);
+            _toDelete = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not delete an entry.");
+            _error = L["error.generic"];
+            _toDelete = null;
+        }
+        finally
+        {
+            _deleting = false;
+        }
+    }
+
+    private async Task ExportAsync()
+    {
+        _info = null;
+        var csv = LedgerCsv.Build(
+            Sorted,
+            Fmt.Culture,
+            [L["csv.date"], L["csv.type"], L["csv.category"], L["csv.name"], L["csv.description"], L["csv.value"]],
+            L.TypeName,
+            (_, category) => L.Category(category));
+
+        var fileName = $"expense-control_{_start:yyyy-MM-dd}_{_end:yyyy-MM-dd}.csv";
+        await JS.InvokeVoidAsync("ecPrefs.downloadText", fileName, csv);
+    }
+}

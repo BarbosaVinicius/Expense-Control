@@ -1,0 +1,39 @@
+<div class="position-relative">
+    <button type="button" class="btn btn-ghost d-flex align-items-center gap-1" @onclick="() => _open = !_open"
+            aria-haspopup="menu" aria-expanded="@(_open ? "true" : "false")" aria-label="@L["language.label"]" title="@L["language.label"]">
+        <i class="bi bi-translate" aria-hidden="true"></i>
+        <span class="fw-semibold small">@Language.Code.ToUpperInvariant()</span>
+    </button>
+
+    @if (_open)
+    {
+        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1049;" @onclick="() => _open = false"></div>
+        <ul class="dropdown-menu show p-1" style="top: 100%; right: 0; z-index: 1050; min-width: 10rem;" role="menu">
+            @foreach (var language in TranslationStore.Languages)
+            {
+                var code = language.Code;
+                <li role="none">
+                    <button type="button" role="menuitemradio" aria-checked="@(code == Language.Code ? "true" : "false")"
+                            class="dropdown-item d-flex align-items-center justify-content-between gap-3"
+                            @onclick="() => SelectAsync(code)">
+                        <span>@language.NativeName</span>
+                        @if (code == Language.Code)
+                        {
+                            <i class="bi bi-check2" aria-hidden="true"></i>
+                        }
+                    </button>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    private bool _open;
+
+    private async Task SelectAsync(string code)
+    {
+        _open = false;
+        await Language.SetAsync(code);
+    }
+}
